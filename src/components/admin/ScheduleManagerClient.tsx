@@ -100,7 +100,9 @@ export function ScheduleManagerClient({
               </p>
             </div>
             <button
-              onClick={() => startTransition(() => toggleCancelClassAction(s.id, !s.isCancelled))}
+              onClick={() => startTransition(async () => {
+                await toggleCancelClassAction(s.id, !s.isCancelled);
+              })}
               disabled={isPending}
               className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800"
             >
