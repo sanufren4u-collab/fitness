@@ -15,8 +15,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL
+      ? process.env.NEXT_PUBLIC_SITE_URL
+      : process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3000",
+  ),
   title: "Byayamshala",
-  description: "Byayamshala operations and member portal",
+  description: "Fitness, training, and gym management for every community.",
+  openGraph: {
+    title: "Byayamshala",
+    description: "Fitness, training, and gym management for every community.",
+    url: "/",
+    siteName: "Byayamshala",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Byayamshala",
+    description: "Fitness, training, and gym management for every community.",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

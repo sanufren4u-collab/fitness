@@ -32,6 +32,8 @@ Existing gym data is assigned to the default Byayamshala vendor. The oldest exis
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+Set `NEXT_PUBLIC_SITE_URL` to the canonical public URL (for example, `https://your-domain.com`) in the deployment environment so Open Graph and Twitter share previews use the correct domain. On Vercel, the production deployment URL is used when this variable is not set.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
