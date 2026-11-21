@@ -8,7 +8,7 @@ import { UserRole, MembershipStatus, BookingStatus } from '@prisma/client';
 export async function bookClassAction(sessionId: string) {
   const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
   const vendorId = user.vendorId;
-  if (user.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
+  if (!vendorId || !user.vendor?.isActive) throw new Error('Unauthorized.');
   if (!user.memberProfile) return { success: false, error: 'Member profile not found.' };
   const memberProfileId = user.memberProfile.id;
 
@@ -79,7 +79,7 @@ export async function bookClassAction(sessionId: string) {
 export async function cancelBookingAction(bookingId: string) {
   const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
   const vendorId = user.vendorId;
-  if (user.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
+  if (!vendorId || !user.vendor?.isActive) throw new Error('Unauthorized.');
 
   try {
     await prisma.$transaction(async (tx) => {

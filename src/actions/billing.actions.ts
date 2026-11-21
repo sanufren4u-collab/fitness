@@ -85,7 +85,7 @@ export async function recordPosMembershipPaymentAction(rawInput: z.infer<typeof 
 export async function toggleMembershipFreezeAction(membershipId: string, action: 'PAUSE' | 'RESUME', reason?: string) {
   const actor = await requireRole([UserRole.ADMIN, UserRole.MEMBER]);
   const vendorId = actor.vendorId;
-  if (actor.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
+  if (!vendorId || !actor.vendor?.isActive) throw new Error('Unauthorized.');
 
   await prisma.$transaction(async (tx) => {
     const membership = await tx.membership.findFirst({
