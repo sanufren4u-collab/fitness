@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/db';
-import { requireRole } from '@/lib/dal';
+import { requireVendorAdmin } from '@/lib/dal';
 import {
   UserRole,
   BillingInterval,
@@ -29,13 +29,19 @@ const createMemberSchema = z.object({
 });
 
 export async function createMemberAction(raw: z.infer<typeof createMemberSchema>) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
     const input = createMemberSchema.parse(raw);
     const email = input.email.toLowerCase().trim();
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return { success: false, error: 'A user with this email already exists.' };
+    if (input.assignedTrainerId) {
+      const trainer = await prisma.trainerProfile.findFirst({
+        where: { id: input.assignedTrainerId, vendorId: admin.vendorId },
+      });
+      if (!trainer) return { success: false, error: 'Selected trainer is unavailable.' };
+    }
 
     const passwordHash = await hash(input.password, 12);
 
@@ -44,11 +50,13 @@ export async function createMemberAction(raw: z.infer<typeof createMemberSchema>
         data: {
           name: input.name.trim(),
           email,
+          vendorId: admin.vendorId,
           phone: input.phone?.trim() || null,
           passwordHash,
           role: UserRole.MEMBER,
           memberProfile: {
             create: {
+              vendorId: admin.vendorId,
               fitnessGoal: input.fitnessGoal?.trim() || null,
               emailNotifications: input.emailNotifications,
               whatsappNotifications: input.whatsappNotifications,
@@ -60,37 +68,40 @@ export async function createMemberAction(raw: z.infer<typeof createMemberSchema>
       });
 
       if (input.planId && user.memberProfile) {
-        const plan = await tx.membershipPlan.findUnique({ where: { id: input.planId } });
-        if (plan) {
-          const now = new Date();
-          const membership = await tx.membership.create({
-            data: {
-              memberId: user.memberProfile.id,
-              planId: plan.id,
-              status: MembershipStatus.ACTIVE,
-              startDate: now,
-              endDate: addDays(now, plan.durationDays),
-              remainingCredits: plan.classCredits,
-              autoRenew: false,
-            },
-          });
+        const plan = await tx.membershipPlan.findFirst({
+          where: { id: input.planId, vendorId: admin.vendorId, isActive: true },
+        });
+        if (!plan) throw new Error('Selected membership plan is unavailable.');
+        const now = new Date();
+        const membership = await tx.membership.create({
+          data: {
+            vendorId: admin.vendorId,
+            memberId: user.memberProfile.id,
+            planId: plan.id,
+            status: MembershipStatus.ACTIVE,
+            startDate: now,
+            endDate: addDays(now, plan.durationDays),
+            remainingCredits: plan.classCredits,
+            autoRenew: false,
+          },
+        });
 
-          const count = await tx.invoice.count();
-          await tx.invoice.create({
-            data: {
-              invoiceNumber: `INV-${now.getFullYear()}-${String(count + 1).padStart(5, '0')}`,
-              userId: user.id,
-              membershipId: membership.id,
-              amount: plan.price,
-              taxAmount: 0,
-              totalAmount: plan.price,
-              status: InvoiceStatus.PAID,
-              paymentMethod: input.paymentMethod,
-              paidAt: now,
-              notes: 'New member onboarding',
-            },
-          });
-        }
+        const count = await tx.invoice.count({ where: { vendorId: admin.vendorId } });
+        await tx.invoice.create({
+          data: {
+            vendorId: admin.vendorId,
+            invoiceNumber: `INV-${admin.vendor.slug.toUpperCase()}-${now.getFullYear()}-${String(count + 1).padStart(5, '0')}`,
+            userId: user.id,
+            membershipId: membership.id,
+            amount: plan.price,
+            taxAmount: 0,
+            totalAmount: plan.price,
+            status: InvoiceStatus.PAID,
+            paymentMethod: input.paymentMethod,
+            paidAt: now,
+            notes: 'New member onboarding',
+          },
+        });
       }
     });
 
@@ -117,14 +128,29 @@ const updateMemberSchema = z.object({
 });
 
 export async function updateMemberAction(raw: z.infer<typeof updateMemberSchema>) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
     const input = updateMemberSchema.parse(raw);
     const email = input.email.toLowerCase().trim();
+    const member = await prisma.user.findFirst({
+      where: {
+        id: input.userId,
+        vendorId: admin.vendorId,
+        role: UserRole.MEMBER,
+        memberProfile: { id: input.memberProfileId },
+      },
+    });
+    if (!member) return { success: false, error: 'Member not found.' };
     const existing = await prisma.user.findFirst({
       where: { email, id: { not: input.userId } },
     });
     if (existing) return { success: false, error: 'A user with this email already exists.' };
+    if (input.assignedTrainerId) {
+      const trainer = await prisma.trainerProfile.findFirst({
+        where: { id: input.assignedTrainerId, vendorId: admin.vendorId },
+      });
+      if (!trainer) return { success: false, error: 'Selected trainer is unavailable.' };
+    }
 
     await prisma.$transaction([
       prisma.user.update({
@@ -157,9 +183,12 @@ export async function updateMemberAction(raw: z.infer<typeof updateMemberSchema>
 
 // 3. DELETE MEMBER
 export async function deleteMemberAction(userId: string) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
-    await prisma.user.delete({ where: { id: userId } });
+    const deleted = await prisma.user.deleteMany({
+      where: { id: userId, vendorId: admin.vendorId, role: UserRole.MEMBER },
+    });
+    if (!deleted.count) throw new Error('Member not found.');
     revalidatePath('/admin/members');
     revalidatePath('/admin/dashboard');
     return { success: true };
@@ -181,11 +210,15 @@ const planSchema = z.object({
 });
 
 export async function upsertPlanAction(raw: z.infer<typeof planSchema>) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
     const input = planSchema.parse(raw);
 
     if (input.id) {
+      const plan = await prisma.membershipPlan.findFirst({
+        where: { id: input.id, vendorId: admin.vendorId },
+      });
+      if (!plan) return { success: false, error: 'Membership plan not found.' };
       await prisma.membershipPlan.update({
         where: { id: input.id },
         data: {
@@ -201,6 +234,7 @@ export async function upsertPlanAction(raw: z.infer<typeof planSchema>) {
     } else {
       await prisma.membershipPlan.create({
         data: {
+          vendorId: admin.vendorId,
           name: input.name.trim(),
           description: input.description?.trim() || null,
           price: input.price,
@@ -232,14 +266,19 @@ const classSchema = z.object({
 });
 
 export async function createClassSessionAction(raw: z.infer<typeof classSchema>) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
     const input = classSchema.parse(raw);
+    const trainer = await prisma.trainerProfile.findFirst({
+      where: { id: input.trainerId, vendorId: admin.vendorId },
+    });
+    if (!trainer) return { success: false, error: 'Selected trainer is unavailable.' };
     const start = new Date(input.startTime);
     const end = new Date(start.getTime() + input.durationMinutes * 60 * 1000);
 
     await prisma.classSession.create({
       data: {
+        vendorId: admin.vendorId,
         title: input.title.trim(),
         category: input.category.trim(),
         room: input.room.trim(),
@@ -259,12 +298,13 @@ export async function createClassSessionAction(raw: z.infer<typeof classSchema>)
 }
 
 export async function toggleCancelClassAction(sessionId: string, isCancelled: boolean) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
-    await prisma.classSession.update({
-      where: { id: sessionId },
+    const updated = await prisma.classSession.updateMany({
+      where: { id: sessionId, vendorId: admin.vendorId },
       data: { isCancelled },
     });
+    if (!updated.count) throw new Error('Class session not found.');
     revalidatePath('/admin/schedule');
     revalidatePath('/app');
     return { success: true };
@@ -284,8 +324,8 @@ const staffSchema = z.object({
 });
 
 export async function createStaffAction(raw: z.infer<typeof staffSchema>) {
+  const admin = await requireVendorAdmin();
   try {
-    await requireRole([UserRole.ADMIN]);
     const input = staffSchema.parse(raw);
     const email = input.email.toLowerCase().trim();
 
@@ -301,6 +341,7 @@ export async function createStaffAction(raw: z.infer<typeof staffSchema>) {
       data: {
         name: input.name.trim(),
         email,
+        vendorId: admin.vendorId,
         phone: input.phone?.trim() || null,
         passwordHash,
         role: input.role,
@@ -308,6 +349,7 @@ export async function createStaffAction(raw: z.infer<typeof staffSchema>) {
           ? {
               trainerProfile: {
                 create: {
+                  vendorId: admin.vendorId,
                   specialties: specialtiesArr,
                   certifications: ['Certified Coach'],
                   hourlyRate: input.hourlyRate ?? 1000,

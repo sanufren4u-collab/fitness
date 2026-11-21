@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/dal';
+import { redirect } from 'next/navigation';
+import { requireRole, requireVendorAdmin } from '@/lib/dal';
 import { prisma } from '@/lib/db';
 import { UserRole, MembershipStatus, InvoiceStatus } from '@prisma/client';
 import { subDays } from 'date-fns';
@@ -8,16 +9,26 @@ import { LocaleNumber, T } from '@/components/shared/LocaleProvider';
 import { QrCode, Users, Layers, CalendarDays, UserCog } from 'lucide-react';
 
 export default async function AdminDashboardPage() {
-  const admin = await requireRole([UserRole.ADMIN]);
+  const signedInUser = await requireRole([UserRole.ADMIN]);
+  if (
+    signedInUser.isPlatformAdmin &&
+    (!signedInUser.vendorId || !signedInUser.vendor?.isActive)
+  ) redirect('/admin/vendors');
+  const admin = await requireVendorAdmin();
 
   const [activeMembers, checkInsTotal, revenue, recentInvoices] = await Promise.all([
-    prisma.membership.count({ where: { status: MembershipStatus.ACTIVE } }),
-    prisma.checkIn.count({ where: { granted: true } }),
+    prisma.membership.count({ where: { vendorId: admin.vendorId, status: MembershipStatus.ACTIVE } }),
+    prisma.checkIn.count({ where: { vendorId: admin.vendorId, granted: true } }),
     prisma.invoice.aggregate({
       _sum: { totalAmount: true },
-      where: { status: InvoiceStatus.PAID, paidAt: { gte: subDays(new Date(), 30) } },
+      where: {
+        vendorId: admin.vendorId,
+        status: InvoiceStatus.PAID,
+        paidAt: { gte: subDays(new Date(), 30) },
+      },
     }),
     prisma.invoice.findMany({
+      where: { vendorId: admin.vendorId },
       include: { user: true },
       orderBy: { createdAt: 'desc' },
       take: 5,
@@ -29,10 +40,15 @@ export default async function AdminDashboardPage() {
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white"><T message="Power Gym Admin Operations" /></h1>
+            <h1 className="text-2xl font-bold text-white"><T message="{name} Admin Operations" values={{ name: admin.vendor.name }} /></h1>
             <p className="text-sm text-zinc-400"><T message="Welcome back, {name}" values={{ name: admin.name }} /></p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
+            {admin.isPlatformAdmin && (
+              <Link href="/admin/vendors" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-800">
+                Manage Vendors
+              </Link>
+            )}
             <Link href="/admin/members" className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-800">
               <Users className="h-4 w-4 text-sky-400" /> <T message="Members & POS" />
             </Link>

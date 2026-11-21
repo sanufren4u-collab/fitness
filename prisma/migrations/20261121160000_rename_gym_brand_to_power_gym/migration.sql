@@ -1,6 +1,6 @@
 ALTER TABLE "GymSettings"
-ALTER COLUMN "gymName" SET DEFAULT 'Power Gym';
+ALTER COLUMN "gymName" SET DEFAULT 'Byayamshala';
 
 UPDATE "GymSettings"
-SET "gymName" = 'Power Gym'
+SET "gymName" = 'Byayamshala'
 WHERE "gymName" IN ('IronPulse Fitness', 'IronPulse Flagship');

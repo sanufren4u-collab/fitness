@@ -14,6 +14,8 @@ const authConfig = {
       if (user) {
         token.id = user.id;
         token.role = user.role as UserRole;
+        token.vendorId = user.vendorId;
+        token.isPlatformAdmin = user.isPlatformAdmin;
       }
       return token;
     },
@@ -21,6 +23,8 @@ const authConfig = {
       if (session.user && token) {
         session.user.id = token.id as string;
         session.user.role = token.role as UserRole;
+        session.user.vendorId = (token.vendorId as string | null) ?? null;
+        session.user.isPlatformAdmin = token.isPlatformAdmin === true;
       }
       return session;
     },

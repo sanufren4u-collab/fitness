@@ -4,12 +4,19 @@ import { hash } from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  const vendor = await prisma.vendor.upsert({
+    where: { id: 'default-vendor' },
+    update: {},
+    create: { id: 'default-vendor', name: 'Byayamshala', slug: 'power-gym' },
+  });
+
   await prisma.gymSettings.upsert({
     where: { id: 'default-settings' },
-    update: { gymName: 'Power Gym' },
+    update: { gymName: 'Byayamshala', vendorId: vendor.id },
     create: {
       id: 'default-settings',
-      gymName: 'Power Gym',
+      vendorId: vendor.id,
+      gymName: 'Byayamshala',
       brandPrimaryHex: '#E11D48',
       timezone: 'Asia/Kolkata',
       currency: 'INR',
@@ -22,13 +29,15 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: 'admin@ironpulse.io' },
-    update: {},
+    update: { isPlatformAdmin: true, vendorId: vendor.id },
     create: {
       email: 'admin@ironpulse.io',
       name: 'Vikram Rathore',
       phone: '+919876543210',
       passwordHash,
       role: UserRole.ADMIN,
+      isPlatformAdmin: true,
+      vendorId: vendor.id,
     },
   });
 
@@ -41,8 +50,10 @@ async function main() {
       phone: '+919876543211',
       passwordHash,
       role: UserRole.TRAINER,
+      vendorId: vendor.id,
       trainerProfile: {
         create: {
+          vendorId: vendor.id,
           bio: 'CSCS Certified Strength & Conditioning Specialist.',
           specialties: ['Strength & Hypertrophy', 'Olympic Lifting'],
           certifications: ['NSCA-CSCS'],
@@ -58,6 +69,7 @@ async function main() {
     update: {},
     create: {
       id: 'plan-pro-monthly',
+      vendorId: vendor.id,
       name: 'Pro All-Access Monthly',
       description: 'Unlimited gym floor access and group classes.',
       price: 3500.0,
@@ -77,8 +89,10 @@ async function main() {
       phone: '+919876543212',
       passwordHash,
       role: UserRole.MEMBER,
+      vendorId: vendor.id,
       memberProfile: {
         create: {
+          vendorId: vendor.id,
           fitnessGoal: 'Build 4kg lean muscle mass',
           assignedTrainerId: trainerUser.trainerProfile!.id,
         },
@@ -92,6 +106,7 @@ async function main() {
   if (!existingMem) {
     const membership = await prisma.membership.create({
       data: {
+        vendorId: vendor.id,
         memberId: memberUser.memberProfile!.id,
         planId: monthlyPlan.id,
         status: MembershipStatus.ACTIVE,
@@ -103,6 +118,7 @@ async function main() {
 
     await prisma.invoice.create({
       data: {
+        vendorId: vendor.id,
         invoiceNumber: 'INV-2026-00001',
         userId: memberUser.id,
         membershipId: membership.id,
@@ -118,6 +134,7 @@ async function main() {
 
     await prisma.workoutPlan.create({
       data: {
+        vendorId: vendor.id,
         memberId: memberUser.memberProfile!.id,
         trainerId: trainerUser.trainerProfile!.id,
         title: '4-Day Upper/Lower Hypertrophy Split',
@@ -147,6 +164,7 @@ async function main() {
 
     await prisma.classSession.create({
       data: {
+        vendorId: vendor.id,
         title: 'Morning Barbell & Conditioning',
         category: 'Strength',
         room: 'Main Turf Zone',

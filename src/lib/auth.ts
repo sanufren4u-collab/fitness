@@ -24,13 +24,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email.toLowerCase().trim() },
+          include: { vendor: { select: { isActive: true } } },
         });
 
-        if (!user || !user.passwordHash || !user.isActive) return null;
+        if (
+          !user ||
+          !user.passwordHash ||
+          !user.isActive ||
+          (!user.isPlatformAdmin && (!user.vendorId || !user.vendor?.isActive))
+        ) return null;
         const isValid = await compare(parsed.data.password, user.passwordHash);
         if (!isValid) return null;
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          vendorId: user.vendorId,
+          isPlatformAdmin: user.isPlatformAdmin,
+        };
       },
     }),
   ],

@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/dal';
 import { prisma } from '@/lib/db';
 import { UserRole } from '@prisma/client';
@@ -6,15 +7,17 @@ import { LocaleDate, T } from '@/components/shared/LocaleProvider';
 
 export default async function TrainerDashboardPage() {
   const user = await requireRole([UserRole.TRAINER, UserRole.ADMIN]);
+  if (user.isPlatformAdmin) redirect('/admin/dashboard');
+  if (!user.vendorId) redirect('/admin/vendors');
 
   const trainer = user.trainerProfile
     ? await prisma.trainerProfile.findUnique({
         where: { id: user.trainerProfile.id },
         include: {
-          assignedMembers: { include: { user: true } },
+          assignedMembers: { where: { vendorId: user.vendorId }, include: { user: true } },
           classesTaught: {
-            where: { startTime: { gte: new Date() } },
-            include: { bookings: { where: { status: 'CONFIRMED' } } },
+            where: { vendorId: user.vendorId, startTime: { gte: new Date() } },
+            include: { bookings: { where: { vendorId: user.vendorId, status: 'CONFIRMED' } } },
             orderBy: { startTime: 'asc' },
           },
         },

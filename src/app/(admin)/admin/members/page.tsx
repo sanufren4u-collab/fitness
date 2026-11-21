@@ -1,25 +1,30 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/dal';
+import { requireVendorAdmin } from '@/lib/dal';
 import { prisma } from '@/lib/db';
-import { UserRole } from '@prisma/client';
 import { SignOutButton } from '@/components/shared/SignOutButton';
 import { MembersManagerClient } from '@/components/admin/MembersManagerClient';
 import { T } from '@/components/shared/LocaleProvider';
 
 export default async function AdminMembersPage() {
-  await requireRole([UserRole.ADMIN]);
+  const admin = await requireVendorAdmin();
 
   const [members, plans, trainers] = await Promise.all([
     prisma.memberProfile.findMany({
+      where: { vendorId: admin.vendorId },
       include: {
         user: true,
         assignedTrainer: { include: { user: true } },
-        memberships: { orderBy: { endDate: 'desc' }, take: 1, include: { plan: true } },
+        memberships: {
+          where: { vendorId: admin.vendorId },
+          orderBy: { endDate: 'desc' },
+          take: 1,
+          include: { plan: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }),
-    prisma.membershipPlan.findMany({ where: { isActive: true }, orderBy: { price: 'asc' } }),
-    prisma.trainerProfile.findMany({ include: { user: true } }),
+    prisma.membershipPlan.findMany({ where: { vendorId: admin.vendorId, isActive: true }, orderBy: { price: 'asc' } }),
+    prisma.trainerProfile.findMany({ where: { vendorId: admin.vendorId }, include: { user: true } }),
   ]);
 
   const serializedMembers = members.map((m) => {

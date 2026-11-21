@@ -33,9 +33,17 @@ export async function POST(req: NextRequest) {
       if (!memberProfileId || !planId || !userId) return;
       const plan = await tx.membershipPlan.findUnique({ where: { id: planId } });
       if (!plan) return;
+      const [memberProfile, user] = await Promise.all([
+        tx.memberProfile.findFirst({
+          where: { id: memberProfileId, userId, vendorId: plan.vendorId },
+        }),
+        tx.user.findFirst({ where: { id: userId, vendorId: plan.vendorId } }),
+      ]);
+      if (!memberProfile || !user) return;
       const now = new Date();
       const membership = await tx.membership.create({
         data: {
+          vendorId: plan.vendorId,
           memberId: memberProfileId,
           planId: plan.id,
           status: MembershipStatus.ACTIVE,
@@ -45,10 +53,13 @@ export async function POST(req: NextRequest) {
           autoRenew: !!session.subscription,
         },
       });
-      const count = await tx.invoice.count();
+      const count = await tx.invoice.count({ where: { vendorId: plan.vendorId } });
+      const vendor = await tx.vendor.findUnique({ where: { id: plan.vendorId }, select: { slug: true } });
+      if (!vendor) return;
       await tx.invoice.create({
         data: {
-          invoiceNumber: `INV-${now.getFullYear()}-${String(count + 1).padStart(5, '0')}`,
+          vendorId: plan.vendorId,
+          invoiceNumber: `INV-${vendor.slug.toUpperCase()}-${now.getFullYear()}-${String(count + 1).padStart(5, '0')}`,
           userId,
           membershipId: membership.id,
           amount: (session.amount_total ?? 0) / 100,

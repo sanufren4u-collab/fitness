@@ -1,14 +1,16 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/dal';
+import { requireVendorAdmin } from '@/lib/dal';
 import { prisma } from '@/lib/db';
-import { UserRole } from '@prisma/client';
 import { SignOutButton } from '@/components/shared/SignOutButton';
 import { PlansManagerClient } from '@/components/admin/PlansManagerClient';
 import { T } from '@/components/shared/LocaleProvider';
 
 export default async function AdminPlansPage() {
-  await requireRole([UserRole.ADMIN]);
-  const plans = await prisma.membershipPlan.findMany({ orderBy: { price: 'asc' } });
+  const admin = await requireVendorAdmin();
+  const plans = await prisma.membershipPlan.findMany({
+    where: { vendorId: admin.vendorId },
+    orderBy: { price: 'asc' },
+  });
 
   return (
     <div className="min-h-screen bg-zinc-950 p-6 text-zinc-100 lg:p-10">

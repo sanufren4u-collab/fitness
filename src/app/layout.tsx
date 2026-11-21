@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Power Gym",
-  description: "Power Gym operations and member portal",
+  title: "Byayamshala",
+  description: "Byayamshala operations and member portal",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

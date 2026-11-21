@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/dal';
+import { requireVendorAdmin } from '@/lib/dal';
 import { prisma } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import { SignOutButton } from '@/components/shared/SignOutButton';
@@ -7,9 +7,9 @@ import { StaffManagerClient } from '@/components/admin/StaffManagerClient';
 import { T } from '@/components/shared/LocaleProvider';
 
 export default async function AdminStaffPage() {
-  await requireRole([UserRole.ADMIN]);
+  const admin = await requireVendorAdmin();
   const users = await prisma.user.findMany({
-    where: { role: { in: [UserRole.ADMIN, UserRole.TRAINER] } },
+    where: { vendorId: admin.vendorId, role: { in: [UserRole.ADMIN, UserRole.TRAINER] } },
     include: { trainerProfile: true },
     orderBy: { createdAt: 'asc' },
   });

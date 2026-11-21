@@ -1,21 +1,24 @@
 import Link from 'next/link';
-import { requireRole } from '@/lib/dal';
+import { requireVendorAdmin } from '@/lib/dal';
 import { prisma } from '@/lib/db';
-import { UserRole } from '@prisma/client';
 import { SignOutButton } from '@/components/shared/SignOutButton';
 import { ScheduleManagerClient } from '@/components/admin/ScheduleManagerClient';
 import { T } from '@/components/shared/LocaleProvider';
 
 export default async function AdminSchedulePage() {
-  await requireRole([UserRole.ADMIN]);
+  const admin = await requireVendorAdmin();
 
   const [sessions, trainers] = await Promise.all([
     prisma.classSession.findMany({
-      include: { trainer: { include: { user: true } }, bookings: { where: { status: 'CONFIRMED' } } },
+      where: { vendorId: admin.vendorId },
+      include: {
+        trainer: { include: { user: true } },
+        bookings: { where: { vendorId: admin.vendorId, status: 'CONFIRMED' } },
+      },
       orderBy: { startTime: 'desc' },
       take: 20,
     }),
-    prisma.trainerProfile.findMany({ include: { user: true } }),
+    prisma.trainerProfile.findMany({ where: { vendorId: admin.vendorId }, include: { user: true } }),
   ]);
 
   return (

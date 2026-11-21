@@ -65,9 +65,36 @@ enum EquipmentStatus {
   OUT_OF_ORDER
 }
 
+model Vendor {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  gymSettings     GymSettings?
+  trainerProfiles TrainerProfile[]
+  memberProfiles  MemberProfile[]
+  membershipPlans MembershipPlan[]
+  memberships     Membership[]
+  invoices        Invoice[]
+  classSessions   ClassSession[]
+  classBookings   ClassBooking[]
+  checkIns        CheckIn[]
+  workoutPlans    WorkoutPlan[]
+  dietPlans       DietPlan[]
+  bodyMetricLogs  BodyMetricLog[]
+  equipment       Equipment[]
+  equipmentLogs   EquipmentLog[]
+}
+
 model GymSettings {
   id                  String   @id @default(cuid())
-  gymName             String   @default("Power Gym")
+  vendorId            String   @unique
+  vendor              Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  gymName             String   @default("Byayamshala")
   brandPrimaryHex     String   @default("#E11D48")
   logoUrl             String?
   timezone            String   @default("Asia/Kolkata")
@@ -78,31 +105,37 @@ model GymSettings {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String?
-  name          String
-  phone         String?
-  avatarUrl     String?
-  role          UserRole  @default(MEMBER)
-  isActive      Boolean   @default(true)
-  qrSecretToken String    @unique @default(cuid())
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String   @id @default(cuid())
+  vendorId        String?
+  vendor          Vendor?  @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  email           String   @unique
+  passwordHash    String?
+  name            String
+  phone           String?
+  avatarUrl       String?
+  role            UserRole @default(MEMBER)
+  isPlatformAdmin Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  qrSecretToken   String   @unique @default(cuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   memberProfile  MemberProfile?
   trainerProfile TrainerProfile?
   checkIns       CheckIn[]
   classBookings  ClassBooking[]
   invoices       Invoice[]
-  reportedIssues EquipmentLog[] @relation("ReportedBy")
+  reportedIssues EquipmentLog[]  @relation("ReportedBy")
 
   @@index([role, isActive])
+  @@index([vendorId, role, isActive])
   @@index([email])
 }
 
 model TrainerProfile {
   id             String   @id @default(cuid())
+  vendorId       String
+  vendor         Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   userId         String   @unique
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bio            String?  @db.Text
@@ -116,36 +149,43 @@ model TrainerProfile {
   classesTaught   ClassSession[]
   workoutPlans    WorkoutPlan[]
   dietPlans       DietPlan[]
+
+  @@index([vendorId])
 }
 
 model MemberProfile {
-  id                String          @id @default(cuid())
-  userId            String          @unique
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dateOfBirth       DateTime?
-  gender            String?
-  emailNotifications Boolean        @default(true)
-  whatsappNotifications Boolean      @default(true)
-  emergencyName     String?
-  emergencyPhone    String?
-  medicalNotes      String?         @db.Text
-  fitnessGoal       String?
-  stripeCustomerId  String?         @unique
-  assignedTrainerId String?
-  assignedTrainer   TrainerProfile? @relation(fields: [assignedTrainerId], references: [id], onDelete: SetNull)
+  id                    String          @id @default(cuid())
+  vendorId              String
+  vendor                Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  userId                String          @unique
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth           DateTime?
+  gender                String?
+  emailNotifications    Boolean         @default(true)
+  whatsappNotifications Boolean         @default(true)
+  emergencyName         String?
+  emergencyPhone        String?
+  medicalNotes          String?         @db.Text
+  fitnessGoal           String?
+  stripeCustomerId      String?         @unique
+  assignedTrainerId     String?
+  assignedTrainer       TrainerProfile? @relation(fields: [assignedTrainerId], references: [id], onDelete: SetNull)
 
   memberships  Membership[]
   bodyMetrics  BodyMetricLog[]
   workoutPlans WorkoutPlan[]
   dietPlans    DietPlan[]
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 
   @@index([assignedTrainerId])
+  @@index([vendorId])
 }
 
 model MembershipPlan {
   id            String          @id @default(cuid())
+  vendorId      String
+  vendor        Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   name          String
   description   String?         @db.Text
   price         Decimal         @db.Decimal(10, 2)
@@ -159,10 +199,14 @@ model MembershipPlan {
   updatedAt     DateTime        @updatedAt
 
   memberships Membership[]
+
+  @@index([vendorId, isActive])
 }
 
 model Membership {
   id                   String           @id @default(cuid())
+  vendorId             String
+  vendor               Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   memberId             String
   member               MemberProfile    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   planId               String
@@ -178,15 +222,18 @@ model Membership {
   totalPausedDays      Int              @default(0)
 
   invoices  Invoice[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([memberId, status])
+  @@index([vendorId, status])
   @@index([endDate, status])
 }
 
 model Invoice {
   id                    String        @id @default(cuid())
+  vendorId              String
+  vendor                Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   invoiceNumber         String        @unique
   userId                String
   user                  User          @relation(fields: [userId], references: [id])
@@ -204,6 +251,7 @@ model Invoice {
   createdAt             DateTime      @default(now())
 
   @@index([userId, createdAt])
+  @@index([vendorId, createdAt])
   @@index([status, paidAt])
 }
 
@@ -215,6 +263,8 @@ model StripeWebhookEvent {
 
 model ClassSession {
   id          String         @id @default(cuid())
+  vendorId    String
+  vendor      Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   title       String
   description String?
   category    String
@@ -231,11 +281,14 @@ model ClassSession {
   bookings ClassBooking[]
 
   @@index([startTime, endTime])
+  @@index([vendorId, startTime])
   @@index([trainerId, startTime])
 }
 
 model ClassBooking {
   id        String        @id @default(cuid())
+  vendorId  String
+  vendor    Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   sessionId String
   session   ClassSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   userId    String
@@ -246,10 +299,13 @@ model ClassBooking {
 
   @@unique([sessionId, userId])
   @@index([userId, status])
+  @@index([vendorId, status])
 }
 
 model CheckIn {
   id           String        @id @default(cuid())
+  vendorId     String
+  vendor       Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   userId       String
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   checkedInAt  DateTime      @default(now())
@@ -259,11 +315,14 @@ model CheckIn {
   verifiedById String?
 
   @@index([checkedInAt])
+  @@index([vendorId, checkedInAt])
   @@index([userId, checkedInAt])
 }
 
 model WorkoutPlan {
   id        String         @id @default(cuid())
+  vendorId  String
+  vendor    Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   memberId  String
   member    MemberProfile  @relation(fields: [memberId], references: [id], onDelete: Cascade)
   trainerId String
@@ -276,10 +335,13 @@ model WorkoutPlan {
   updatedAt DateTime       @updatedAt
 
   @@index([memberId, isActive])
+  @@index([vendorId])
 }
 
 model DietPlan {
   id            String         @id @default(cuid())
+  vendorId      String
+  vendor        Vendor         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   memberId      String
   member        MemberProfile  @relation(fields: [memberId], references: [id], onDelete: Cascade)
   trainerId     String
@@ -295,10 +357,13 @@ model DietPlan {
   updatedAt     DateTime       @updatedAt
 
   @@index([memberId, isActive])
+  @@index([vendorId])
 }
 
 model BodyMetricLog {
   id         String        @id @default(cuid())
+  vendorId   String
+  vendor     Vendor        @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   memberId   String
   member     MemberProfile @relation(fields: [memberId], references: [id], onDelete: Cascade)
   recordedAt DateTime      @default(now())
@@ -311,12 +376,15 @@ model BodyMetricLog {
   notes      String?
 
   @@index([memberId, recordedAt])
+  @@index([vendorId, recordedAt])
 }
 
 model Equipment {
   id             String          @id @default(cuid())
+  vendorId       String
+  vendor         Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   name           String
-  serialNumber   String?         @unique
+  serialNumber   String?
   category       String
   status         EquipmentStatus @default(OPERATIONAL)
   purchaseDate   DateTime?
@@ -325,10 +393,15 @@ model Equipment {
   logs           EquipmentLog[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+
+  @@unique([vendorId, serialNumber])
+  @@index([vendorId])
 }
 
 model EquipmentLog {
   id           String    @id @default(cuid())
+  vendorId     String
+  vendor       Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   equipmentId  String
   equipment    Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
   reportedById String
@@ -340,4 +413,5 @@ model EquipmentLog {
   createdAt    DateTime  @default(now())
 
   @@index([equipmentId, resolvedAt])
+  @@index([vendorId, createdAt])
 }

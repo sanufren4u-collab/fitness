@@ -91,7 +91,7 @@ export function MembersManagerClient({
 
   function openEmail(m: MemberRow) {
     if (!m.emailNotifications) return;
-    const subject = encodeURIComponent(`Power Gym notification for ${m.name}`);
+    const subject = encodeURIComponent(`Byayamshala notification for ${m.name}`);
     window.open(`mailto:${encodeURIComponent(m.email)}?subject=${subject}`, '_self');
   }
 
@@ -99,7 +99,7 @@ export function MembersManagerClient({
     if (!m.whatsappNotifications || !m.phone) return;
     const phone = m.phone.replace(/\D/g, '').replace(/^0/, '');
     const message = encodeURIComponent(
-      `Hello ${m.name}, this is Power Gym regarding your membership and payment status.`,
+      `Hello ${m.name}, this is Byayamshala regarding your membership and payment status.`,
     );
     window.open(`https://wa.me/${phone}?text=${message}`, '_blank', 'noopener,noreferrer');
   }

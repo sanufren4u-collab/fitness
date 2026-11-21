@@ -1,5 +1,5 @@
 /**
- * Power Gym — Complete Project Hydrator
+ * Byayamshala — Complete Project Hydrator
  * Run inside your project directory (`E:\ironpulse-os`):
  *   node hydrate-ironpulse.js
  *
@@ -17,7 +17,7 @@ function writeFile(relPath, content) {
   console.log(`✔ Wrote ${relPath}`);
 }
 
-console.log('🚀 Hydrating complete Power Gym structure in', process.cwd(), '...\n');
+console.log('🚀 Hydrating complete Byayamshala structure in', process.cwd(), '...\n');
 
 // ============================================================================
 // 0. NEXT.JS 16 CONFIG (Allow standard dynamic SSR routes without Suspense errors)
@@ -128,7 +128,7 @@ enum EquipmentStatus {
 
 model GymSettings {
   id                  String   @id @default(cuid())
-  gymName             String   @default("Power Gym")
+  gymName             String   @default("Byayamshala")
   brandPrimaryHex     String   @default("#E11D48")
   logoUrl             String?
   timezone            String   @default("Asia/Kolkata")
@@ -414,7 +414,7 @@ async function main() {
     update: {},
     create: {
       id: 'default-settings',
-      gymName: 'Power Gym',
+      gymName: 'Byayamshala',
       brandPrimaryHex: '#E11D48',
       timezone: 'Asia/Kolkata',
       currency: 'INR',
@@ -1906,7 +1906,7 @@ export default function LoginPage() {
           <div className="rounded-lg bg-rose-600 p-2">
             <Dumbbell className="h-5 w-5 text-white" />
           </div>
-          <span className="text-xl font-bold text-white">Power Gym OS</span>
+          <span className="text-xl font-bold text-white">Byayamshala OS</span>
         </div>
 
         <h1 className="mt-6 text-2xl font-bold text-white">Sign in to your portal</h1>
@@ -1999,7 +1999,7 @@ export default async function AdminDashboardPage() {
       <div className="mx-auto max-w-6xl space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Power Gym Admin Operations</h1>
+            <h1 className="text-2xl font-bold text-white">Byayamshala Admin Operations</h1>
             <p className="text-sm text-zinc-400">Welcome back, {admin.name}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -2724,7 +2724,7 @@ export default async function MemberHomePage() {
     <div className="min-h-screen bg-zinc-950 p-4 text-zinc-100">
       <div className="mx-auto max-w-lg space-y-6 pb-16">
         <div className="flex items-center justify-between pt-2">
-          <span className="text-lg font-bold text-white">Power Gym Member</span>
+          <span className="text-lg font-bold text-white">Byayamshala Member</span>
           <SignOutButton />
         </div>
 

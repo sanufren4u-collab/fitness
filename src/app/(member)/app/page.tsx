@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { requireRole } from '@/lib/dal';
 import { prisma } from '@/lib/db';
 import { UserRole } from '@prisma/client';
@@ -8,19 +9,30 @@ import { T } from '@/components/shared/LocaleProvider';
 
 export default async function MemberHomePage() {
   const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
+  if (user.isPlatformAdmin) redirect('/admin/dashboard');
+  if (!user.vendorId) redirect('/admin/vendors');
 
   const [membership, upcomingSessions, workoutPlan] = await Promise.all([
     user.memberProfile
-      ? prisma.membership.findFirst({ where: { memberId: user.memberProfile.id }, orderBy: { endDate: 'desc' }, include: { plan: true } })
+      ? prisma.membership.findFirst({
+          where: { memberId: user.memberProfile.id, vendorId: user.vendorId },
+          orderBy: { endDate: 'desc' },
+          include: { plan: true },
+        })
       : null,
     prisma.classSession.findMany({
-      where: { startTime: { gte: new Date() }, isCancelled: false },
-      include: { trainer: { include: { user: true } }, bookings: { where: { status: 'CONFIRMED' } } },
+      where: { vendorId: user.vendorId, startTime: { gte: new Date() }, isCancelled: false },
+      include: {
+        trainer: { include: { user: true } },
+        bookings: { where: { vendorId: user.vendorId, status: 'CONFIRMED' } },
+      },
       orderBy: { startTime: 'asc' },
       take: 4,
     }),
     user.memberProfile
-      ? prisma.workoutPlan.findFirst({ where: { memberId: user.memberProfile.id, isActive: true } })
+      ? prisma.workoutPlan.findFirst({
+          where: { memberId: user.memberProfile.id, vendorId: user.vendorId, isActive: true },
+        })
       : null,
   ]);
 
@@ -28,7 +40,7 @@ export default async function MemberHomePage() {
     <div className="min-h-screen bg-zinc-950 p-4 text-zinc-100">
       <div className="mx-auto max-w-lg space-y-6 pb-16">
         <div className="flex items-center justify-between pt-2">
-          <span className="text-lg font-bold text-white"><T message="Power Gym Member" /></span>
+          <span className="text-lg font-bold text-white"><T message="{name} Member" values={{ name: user.vendor?.name ?? '' }} /></span>
           <SignOutButton />
         </div>
 

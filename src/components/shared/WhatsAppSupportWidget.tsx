@@ -8,17 +8,17 @@ const supportNumber = '919582227325';
 const supportTopics = [
   {
     label: 'Payment help',
-    message: 'Hello Power Gym, I need help with a payment.',
+    message: 'Hello Byayamshala, I need help with a payment.',
     Icon: CreditCard,
   },
   {
     label: 'Membership help',
-    message: 'Hello Power Gym, I have a question about my membership.',
+    message: 'Hello Byayamshala, I have a question about my membership.',
     Icon: Dumbbell,
   },
   {
     label: 'General question',
-    message: 'Hello Power Gym, I have a question.',
+    message: 'Hello Byayamshala, I have a question.',
     Icon: MessageCircle,
   },
 ];
@@ -37,7 +37,7 @@ export function WhatsAppSupportWidget() {
         >
           <div className="flex items-start justify-between bg-emerald-700 px-4 py-4">
             <div>
-              <h2 className="text-sm font-bold text-white">{t('Power Gym Support')}</h2>
+              <h2 className="text-sm font-bold text-white">{t('Byayamshala Support')}</h2>
               <p className="mt-1 text-xs text-emerald-50">{t('Choose a topic to chat on WhatsApp')}</p>
             </div>
             <button

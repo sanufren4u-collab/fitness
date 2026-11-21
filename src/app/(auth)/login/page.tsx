@@ -30,12 +30,12 @@ export default function LoginPage() {
 
   return (
     <main className="login-shell min-h-screen text-zinc-100">
-      <section className="login-hero" aria-label="Power Gym">
+      <section className="login-hero" aria-label="Byayamshala">
         <div className="login-hero-grid" aria-hidden="true" />
         <div className="login-hero-content">
           <div className="login-brand">
             <span className="login-brand-mark"><Dumbbell aria-hidden="true" className="h-5 w-5" /></span>
-            <span>Power Gym <span className="font-normal text-white/55">OS</span></span>
+            <span>Byayamshala <span className="font-normal text-white/55">OS</span></span>
           </div>
 
           <div className="login-headline">
@@ -65,7 +65,7 @@ export default function LoginPage() {
         <div className="login-card">
           <div className="login-mobile-brand">
             <span className="login-brand-mark"><Dumbbell aria-hidden="true" className="h-5 w-5" /></span>
-            <span>Power Gym <span className="font-normal text-white/55">OS</span></span>
+            <span>Byayamshala <span className="font-normal text-white/55">OS</span></span>
           </div>
 
           <div className="login-card-heading">

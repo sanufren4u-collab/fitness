@@ -6,15 +6,17 @@ import { requireRole } from '@/lib/dal';
 import { UserRole, MembershipStatus, BookingStatus } from '@prisma/client';
 
 export async function bookClassAction(sessionId: string) {
-  try {
-    const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
-    if (!user.memberProfile) return { success: false, error: 'Member profile not found.' };
-    const memberProfileId = user.memberProfile.id;
+  const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
+  const vendorId = user.vendorId;
+  if (user.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
+  if (!user.memberProfile) return { success: false, error: 'Member profile not found.' };
+  const memberProfileId = user.memberProfile.id;
 
+  try {
     await prisma.$transaction(async (tx) => {
       const lockedSessions = await tx.$queryRaw<
-        Array<{ id: string; startTime: Date; endTime: Date; capacity: number; isCancelled: boolean }>
-      >`SELECT id, "startTime", "endTime", capacity, "isCancelled" FROM "ClassSession" WHERE id = ${sessionId} FOR UPDATE`;
+        Array<{ id: string; vendorId: string; startTime: Date; endTime: Date; capacity: number; isCancelled: boolean }>
+      >`SELECT id, "vendorId", "startTime", "endTime", capacity, "isCancelled" FROM "ClassSession" WHERE id = ${sessionId} AND "vendorId" = ${vendorId} FOR UPDATE`;
 
       const session = lockedSessions[0];
       if (!session) throw new Error('Class session does not exist.');
@@ -24,6 +26,7 @@ export async function bookClassAction(sessionId: string) {
       const activeMembership = await tx.membership.findFirst({
         where: {
           memberId: memberProfileId,
+          vendorId,
           status: MembershipStatus.ACTIVE,
           endDate: { gte: session.startTime },
           OR: [{ remainingCredits: null }, { remainingCredits: { gt: 0 } }],
@@ -36,21 +39,26 @@ export async function bookClassAction(sessionId: string) {
       const overlapping = await tx.classBooking.findFirst({
         where: {
           userId: user.id,
+          vendorId,
           status: BookingStatus.CONFIRMED,
-          session: { startTime: { lt: session.endTime }, endTime: { gt: session.startTime } },
+          session: {
+            vendorId,
+            startTime: { lt: session.endTime },
+            endTime: { gt: session.startTime },
+          },
         },
       });
       if (overlapping) throw new Error('Overlapping class booking detected.');
 
       const confirmedCount = await tx.classBooking.count({
-        where: { sessionId, status: BookingStatus.CONFIRMED },
+        where: { sessionId, vendorId, status: BookingStatus.CONFIRMED },
       });
       if (confirmedCount >= session.capacity) throw new Error('Class reached full capacity.');
 
       await tx.classBooking.upsert({
         where: { sessionId_userId: { sessionId, userId: user.id } },
         update: { status: BookingStatus.CONFIRMED, bookedAt: new Date() },
-        create: { sessionId, userId: user.id, status: BookingStatus.CONFIRMED },
+        create: { vendorId, sessionId, userId: user.id, status: BookingStatus.CONFIRMED },
       });
 
       if (activeMembership.remainingCredits !== null) {
@@ -69,12 +77,14 @@ export async function bookClassAction(sessionId: string) {
 }
 
 export async function cancelBookingAction(bookingId: string) {
-  try {
-    const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
+  const user = await requireRole([UserRole.MEMBER, UserRole.ADMIN]);
+  const vendorId = user.vendorId;
+  if (user.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
 
+  try {
     await prisma.$transaction(async (tx) => {
-      const booking = await tx.classBooking.findUnique({
-        where: { id: bookingId },
+      const booking = await tx.classBooking.findFirst({
+        where: { id: bookingId, vendorId },
         include: { session: true },
       });
 
@@ -82,7 +92,7 @@ export async function cancelBookingAction(bookingId: string) {
       if (booking.userId !== user.id && user.role !== UserRole.ADMIN) throw new Error('Unauthorized.');
       if (booking.status !== BookingStatus.CONFIRMED) throw new Error('Booking not active.');
 
-      const settings = await tx.gymSettings.findFirst();
+      const settings = await tx.gymSettings.findFirst({ where: { vendorId } });
       const cutoffHours = settings?.cancellationWindowH ?? 4;
       const cutoffTime = new Date(booking.session.startTime.getTime() - cutoffHours * 60 * 60 * 1000);
       const isRefundable = new Date() <= cutoffTime;
@@ -96,6 +106,7 @@ export async function cancelBookingAction(bookingId: string) {
         const creditMem = await tx.membership.findFirst({
           where: {
             memberId: user.memberProfile.id,
+            vendorId,
             status: MembershipStatus.ACTIVE,
             remainingCredits: { not: null },
           },

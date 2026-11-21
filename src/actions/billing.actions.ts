@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { prisma } from '@/lib/db';
-import { requireRole } from '@/lib/dal';
+import { requireRole, requireVendorAdmin } from '@/lib/dal';
 import { UserRole, PaymentMethod, InvoiceStatus, MembershipStatus } from '@prisma/client';
 import { addDays, differenceInCalendarDays } from 'date-fns';
 
@@ -16,15 +16,20 @@ const posPaymentSchema = z.object({
 });
 
 export async function recordPosMembershipPaymentAction(rawInput: z.infer<typeof posPaymentSchema>) {
-  await requireRole([UserRole.ADMIN]);
+  const admin = await requireVendorAdmin();
   const input = posPaymentSchema.parse(rawInput);
 
   const result = await prisma.$transaction(async (tx) => {
     const [memberProfile, plan, existingActive] = await Promise.all([
-      tx.memberProfile.findUnique({ where: { id: input.memberProfileId } }),
-      tx.membershipPlan.findUnique({ where: { id: input.planId } }),
+      tx.memberProfile.findFirst({ where: { id: input.memberProfileId, vendorId: admin.vendorId } }),
+      tx.membershipPlan.findFirst({ where: { id: input.planId, vendorId: admin.vendorId } }),
       tx.membership.findFirst({
-        where: { memberId: input.memberProfileId, status: MembershipStatus.ACTIVE, endDate: { gt: new Date() } },
+        where: {
+          vendorId: admin.vendorId,
+          memberId: input.memberProfileId,
+          status: MembershipStatus.ACTIVE,
+          endDate: { gt: new Date() },
+        },
         orderBy: { endDate: 'desc' },
       }),
     ]);
@@ -38,6 +43,7 @@ export async function recordPosMembershipPaymentAction(rawInput: z.infer<typeof 
 
     const membership = await tx.membership.create({
       data: {
+        vendorId: admin.vendorId,
         memberId: memberProfile.id,
         planId: plan.id,
         status: MembershipStatus.ACTIVE,
@@ -48,12 +54,13 @@ export async function recordPosMembershipPaymentAction(rawInput: z.infer<typeof 
       },
     });
 
-    const invoiceCount = await tx.invoice.count();
-    const invoiceNumber = `INV-${now.getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
+    const invoiceCount = await tx.invoice.count({ where: { vendorId: admin.vendorId } });
+    const invoiceNumber = `INV-${admin.vendor.slug.toUpperCase()}-${now.getFullYear()}-${String(invoiceCount + 1).padStart(5, '0')}`;
     const baseAmount = Number(plan.price);
 
     const invoice = await tx.invoice.create({
       data: {
+        vendorId: admin.vendorId,
         invoiceNumber,
         userId: memberProfile.userId,
         membershipId: membership.id,
@@ -77,17 +84,19 @@ export async function recordPosMembershipPaymentAction(rawInput: z.infer<typeof 
 
 export async function toggleMembershipFreezeAction(membershipId: string, action: 'PAUSE' | 'RESUME', reason?: string) {
   const actor = await requireRole([UserRole.ADMIN, UserRole.MEMBER]);
+  const vendorId = actor.vendorId;
+  if (actor.isPlatformAdmin || !vendorId) throw new Error('Unauthorized.');
 
   await prisma.$transaction(async (tx) => {
-    const membership = await tx.membership.findUnique({
-      where: { id: membershipId },
+    const membership = await tx.membership.findFirst({
+      where: { id: membershipId, vendorId },
       include: { member: true },
     });
 
     if (!membership) throw new Error('Membership not found.');
     if (actor.role === UserRole.MEMBER && membership.member.userId !== actor.id) throw new Error('Unauthorized.');
 
-    const settings = await tx.gymSettings.findFirst();
+    const settings = await tx.gymSettings.findFirst({ where: { vendorId } });
     const maxFreezeDays = settings?.maxFreezeDaysPerYr ?? 30;
     const now = new Date();
 
