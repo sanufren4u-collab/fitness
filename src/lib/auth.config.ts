@@ -1,8 +1,10 @@
 import type { UserRole } from '@prisma/client';
 import type { NextAuthConfig } from 'next-auth';
 
+export const authSecret = process.env.AUTH_SECRET || 'ironpulse-local-dev-secret-key-at-least-32-chars';
+
 const authConfig = {
-  secret: process.env.AUTH_SECRET || 'ironpulse-local-dev-secret-key-at-least-32-chars',
+  secret: authSecret,
   trustHost: true,
   session: { strategy: 'jwt', maxAge: 7 * 24 * 60 * 60 },
   pages: { signIn: '/login', error: '/login' },

@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
-import NextAuth from 'next-auth';
-import authConfig from '@/lib/auth.config';
+import { getToken } from 'next-auth/jwt';
+import { NextResponse, type NextRequest } from 'next/server';
+import { authSecret } from '@/lib/auth.config';
 
-export default NextAuth(authConfig).auth((req) => {
+export default async function middleware(req: NextRequest) {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth?.user;
-  const role = req.auth?.user?.role;
+  const token = await getToken({
+    req,
+    secret: authSecret,
+    secureCookie: nextUrl.protocol === 'https:',
+  });
+  const isLoggedIn = !!token;
+  const role = token?.role;
 
   const isAuthRoute = nextUrl.pathname.startsWith('/login');
   const isAdminRoute = nextUrl.pathname.startsWith('/admin');
@@ -36,7 +41,7 @@ export default NextAuth(authConfig).auth((req) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
