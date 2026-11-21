@@ -38,5 +38,6 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/admin/:path*', '/trainer/:path*', '/app/:path*', '/kiosk/:path*', '/login'],
+  runtime: "nodejs",
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
