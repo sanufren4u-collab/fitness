@@ -1,0 +1,343 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TRAINER
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  PAST_DUE
+  CANCELLED
+}
+
+enum BillingInterval {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum PaymentMethod {
+  STRIPE_CARD
+  CASH
+  UPI
+  POS_TERMINAL
+  BANK_TRANSFER
+}
+
+enum InvoiceStatus {
+  PAID
+  OPEN
+  VOID
+  REFUNDED
+  FAILED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+enum CheckInMethod {
+  QR_SCAN
+  FRONT_DESK_MANUAL
+  CLASS_ROSTER
+}
+
+enum EquipmentStatus {
+  OPERATIONAL
+  NEEDS_MAINTENANCE
+  OUT_OF_ORDER
+}
+
+model GymSettings {
+  id                  String   @id @default(cuid())
+  gymName             String   @default("Power Gym")
+  brandPrimaryHex     String   @default("#E11D48")
+  logoUrl             String?
+  timezone            String   @default("Asia/Kolkata")
+  currency            String   @default("INR")
+  cancellationWindowH Int      @default(4)
+  maxFreezeDaysPerYr  Int      @default(30)
+  updatedAt           DateTime @updatedAt
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String
+  phone         String?
+  avatarUrl     String?
+  role          UserRole  @default(MEMBER)
+  isActive      Boolean   @default(true)
+  qrSecretToken String    @unique @default(cuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberProfile  MemberProfile?
+  trainerProfile TrainerProfile?
+  checkIns       CheckIn[]
+  classBookings  ClassBooking[]
+  invoices       Invoice[]
+  reportedIssues EquipmentLog[] @relation("ReportedBy")
+
+  @@index([role, isActive])
+  @@index([email])
+}
+
+model TrainerProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio            String?  @db.Text
+  specialties    String[]
+  certifications String[]
+  hourlyRate     Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  assignedMembers MemberProfile[]
+  classesTaught   ClassSession[]
+  workoutPlans    WorkoutPlan[]
+  dietPlans       DietPlan[]
+}
+
+model MemberProfile {
+  id                String          @id @default(cuid())
+  userId            String          @unique
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth       DateTime?
+  gender            String?
+  emailNotifications Boolean        @default(true)
+  whatsappNotifications Boolean      @default(true)
+  emergencyName     String?
+  emergencyPhone    String?
+  medicalNotes      String?         @db.Text
+  fitnessGoal       String?
+  stripeCustomerId  String?         @unique
+  assignedTrainerId String?
+  assignedTrainer   TrainerProfile? @relation(fields: [assignedTrainerId], references: [id], onDelete: SetNull)
+
+  memberships  Membership[]
+  bodyMetrics  BodyMetricLog[]
+  workoutPlans WorkoutPlan[]
+  dietPlans    DietPlan[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([assignedTrainerId])
+}
+
+model MembershipPlan {
+  id            String          @id @default(cuid())
+  name          String
+  description   String?         @db.Text
+  price         Decimal         @db.Decimal(10, 2)
+  interval      BillingInterval
+  durationDays  Int
+  classCredits  Int?
+  includesPT    Boolean         @default(false)
+  stripePriceId String?         @unique
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  memberships Membership[]
+}
+
+model Membership {
+  id                   String           @id @default(cuid())
+  memberId             String
+  member               MemberProfile    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 MembershipPlan   @relation(fields: [planId], references: [id])
+  status               MembershipStatus @default(ACTIVE)
+  startDate            DateTime
+  endDate              DateTime
+  remainingCredits     Int?
+  stripeSubscriptionId String?          @unique
+  autoRenew            Boolean          @default(true)
+  pausedAt             DateTime?
+  pauseReason          String?
+  totalPausedDays      Int              @default(0)
+
+  invoices  Invoice[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, status])
+  @@index([endDate, status])
+}
+
+model Invoice {
+  id                    String        @id @default(cuid())
+  invoiceNumber         String        @unique
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id])
+  membershipId          String?
+  membership            Membership?   @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  amount                Decimal       @db.Decimal(10, 2)
+  taxAmount             Decimal       @default(0) @db.Decimal(10, 2)
+  totalAmount           Decimal       @db.Decimal(10, 2)
+  currency              String        @default("INR")
+  status                InvoiceStatus @default(PAID)
+  paymentMethod         PaymentMethod
+  stripePaymentIntentId String?       @unique
+  notes                 String?
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, paidAt])
+}
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+}
+
+model ClassSession {
+  id          String         @id @default(cuid())
+  title       String
+  description String?
+  category    String
+  room        String         @default("Main Studio")
+  trainerId   String
+  trainer     TrainerProfile @relation(fields: [trainerId], references: [id])
+  startTime   DateTime
+  endTime     DateTime
+  capacity    Int
+  isCancelled Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  bookings ClassBooking[]
+
+  @@index([startTime, endTime])
+  @@index([trainerId, startTime])
+}
+
+model ClassBooking {
+  id        String        @id @default(cuid())
+  sessionId String
+  session   ClassSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    BookingStatus @default(CONFIRMED)
+  bookedAt  DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([sessionId, userId])
+  @@index([userId, status])
+}
+
+model CheckIn {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkedInAt  DateTime      @default(now())
+  method       CheckInMethod @default(QR_SCAN)
+  granted      Boolean       @default(true)
+  denialReason String?
+  verifiedById String?
+
+  @@index([checkedInAt])
+  @@index([userId, checkedInAt])
+}
+
+model WorkoutPlan {
+  id        String         @id @default(cuid())
+  memberId  String
+  member    MemberProfile  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId String
+  trainer   TrainerProfile @relation(fields: [trainerId], references: [id])
+  title     String
+  goal      String?
+  isActive  Boolean        @default(true)
+  schedule  Json
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([memberId, isActive])
+}
+
+model DietPlan {
+  id            String         @id @default(cuid())
+  memberId      String
+  member        MemberProfile  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  trainerId     String
+  trainer       TrainerProfile @relation(fields: [trainerId], references: [id])
+  title         String
+  dailyCalories Int
+  proteinGrams  Int
+  carbsGrams    Int
+  fatsGrams     Int
+  isActive      Boolean        @default(true)
+  meals         Json
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([memberId, isActive])
+}
+
+model BodyMetricLog {
+  id         String        @id @default(cuid())
+  memberId   String
+  member     MemberProfile @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  recordedAt DateTime      @default(now())
+  weightKg   Decimal?      @db.Decimal(5, 2)
+  bodyFatPct Decimal?      @db.Decimal(4, 1)
+  chestCm    Decimal?      @db.Decimal(5, 1)
+  waistCm    Decimal?      @db.Decimal(5, 1)
+  armsCm     Decimal?      @db.Decimal(5, 1)
+  prRecords  Json?
+  notes      String?
+
+  @@index([memberId, recordedAt])
+}
+
+model Equipment {
+  id             String          @id @default(cuid())
+  name           String
+  serialNumber   String?         @unique
+  category       String
+  status         EquipmentStatus @default(OPERATIONAL)
+  purchaseDate   DateTime?
+  lastServicedAt DateTime?
+  nextServiceDue DateTime?
+  logs           EquipmentLog[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model EquipmentLog {
+  id           String    @id @default(cuid())
+  equipmentId  String
+  equipment    Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  reportedById String
+  reportedBy   User      @relation("ReportedBy", fields: [reportedById], references: [id])
+  issueSummary String
+  resolution   String?
+  cost         Decimal?  @db.Decimal(10, 2)
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([equipmentId, resolvedAt])
+}
